@@ -1,7 +1,7 @@
 ---
 title: EDS 222 HW1
 subtitle: Foundations of inference
-author: Your Name Here
+author: Natasha Clemencon-Charles
 ---
 
 ## 1. Conduct a permutation test
@@ -16,13 +16,176 @@ To perform this test, you'll need the `exide-property-covariates.csv` file found
 
 The question is about _average lead soil concentrations_. You'll need to first get the average lead soil concentration for each property, then join your result to the property covariate data to get the year the house was built.
 
+
+N0 = There is no difference between the average lead soil concentrations in homes built before and after 1970. 
+N1 = There is a difference between the average lead soil concentrations in homes built before and after 1970.
+
+```{r}
+library(tidyverse)
+set.seed(222)
+soil <- read.csv('data/exide-soil-cores.csv')
+properties <- read.csv('data/exide-property-covariates.csv')
+
+# Remove NAs from prop
+properties <- properties |> 
+    drop_na(year_built)
+```
 :::
 
+```{r}
+# Find the means of the lead concentrations per property
+meanbyprop <- soil |> 
+    summarize(meanpbppm = mean(pb_ppm), na.rm=TRUE, .by=property_id)
+```
+
+```{r}
+# Join the data frames
+soil_cores <- left_join(properties, meanbyprop, by= join_by(property_id)) 
+
+```
+
+
+
+```{r}
+soil_cores <- soil_cores |> 
+    mutate(pre1970 = year_built < 1970)
+```
+```{r}
+# Find the mean lead levels in soil before and after 1970. 
+soilmeansprepost <- soil_cores |>
+  summarize(meanprepost = mean(meanpbppm), .by = pre1970) |>
+  arrange(pre1970)
+```
+
+```{r}
+# Find the difference in means between the mean lead levels in the soil before and after 1970. 
+observeddifmean <- soilmeansprepost$meanprepost[2]-soilmeansprepost$meanprepost[1]
+```
+
+```{r}
+# Now shuffle the samples and do it again 
+ shuffled_year <- soil_cores |>
+      mutate(pre1970 = sample(pre1970)) |>
+      summarize(meanprepost = mean(meanpbppm), .by = pre1970)
+```
+
+```{r}
+shuffledifmean <- shuffled_year$meanprepost[2] - shuffled_year$meanprepost[1]
+```
+
+```{r}
+# Now repeat 10,000 times
+prepost_null_dist <- replicate(
+  1e4,
+  {
+    shuffled_year <- soil_cores |>
+      mutate(pre1970 = sample(pre1970)) |>
+      summarize(meanprepost = mean(meanpbppm), .by = pre1970)
+    shuffled_year$meanprepost[2] - shuffled_year$meanprepost[1]
+
+  } )
+```
+
+```{r}
+# Plot the null distribution
+tibble(diff_means=prepost_null_dist) |>
+  ggplot(aes(prepost_null_dist)) +
+  geom_histogram(binwidth = 5)
+```
+
+```{r}
+# Create the p value
+pval <- mean(prepost_null_dist>observeddifmean)
+
+```
+```{r}
+## The p value of this permutation test was 0, which is below an alpha of 0.05. This means that we have evidence to reject the null hypothesis that there is no difference between soil samples from houses taken before and after 1970. This means that the probaility of observing our sample if the null is true is close to 0. 
+
+```
 ## 2. Estimate a confidence interval
 
 Estimate a confidence interval to investigate the following question:
+```{r}
+soil_cores <- soil_cores |> 
+  mutate(dist_to_freeway_km=dist_to_freeway_m / 1000) |> 
+    mutate(close = dist_to_freeway_km <= 1)
+
+```
+
+
+```{r}
+# Visualize the raw data by plotting the distance to freeway and the mean pb ppm. 
+soil_cores |> 
+  ggplot(aes(x=as.factor(close), y=meanpbppm))+
+  geom_boxplot() +
+  scale_x_discrete(
+    name="",labels = c("FALSE" = "Further than 1 km", "TRUE" = "Within 1 km")
+
+  )
+
+```
+
+```{r}
+```
+
+```{r}
+# Graph raw data for pre and post 1970 home soil lead contents. 
+soil_cores |>
+  ggplot(aes(x = as.factor(pre1970), y = meanpbppm)) +
+  geom_boxplot() +
+  scale_x_discrete(
+    name="",
+     labels = c("FALSE" = "Post 1970", "TRUE" = "Pre 1970")
+      )
+```
 
 > How much is the difference in average lead soil concentrations between properties within 1km of a freeway and those farther away?
+
+```{r}
+dist_observed <- soil_cores |>
+  summarize(dist_to_freeway_mean_obs = mean(meanpbppm), .by = close) |>
+  arrange(close)
+```
+
+```{r}
+dist_observed_diff = dist_observed$dist_to_freeway_mean_obs[2]-dist_observed$dist_to_freeway_mean_obs[1]
+```
+```{r}
+# Now shuffle it and do it again 
+
+area_samp_dist <- replicate(
+  1e4,
+  {
+    resampled <- soil_cores |>
+      slice_sample(n = nrow(soil_cores), replace = TRUE) |>
+      summarize(dist_to_freeway = mean(meanpbppm), .by = close) |>
+      arrange(close)
+
+    resampled$dist_to_freeway[2] -
+      resampled$dist_to_freeway[1]
+  }
+)
+
+```
+
+```{r}
+# Find the 95% conf int
+area_95ci <- quantile(area_samp_dist, c(0.025, 0.975))
+```
+
+```{r}
+# Plot the distribution
+tibble(diff_means = area_samp_dist) |>
+  ggplot(aes(diff_means)) +
+  geom_histogram(binwidth = 1)  +
+  geom_vline(xintercept = dist_observed_diff, color = "magenta", linewidth = 1.5) +
+  geom_vline(xintercept = area_95ci, linetype = "dashed", linewidth = 1.5)
+```
+
+```{r}
+# According to this confidence interval, we are 95% confident that the true population difference in means in lead concentrations between houses within a kilometer of the freeway and without lies between 39 and 102 ppm. 
+```
+
 
 ## 3. Simulate a negative result
 
@@ -37,3 +200,104 @@ To simulate a negative result, perform the following.
 5. Repeat the simulation 1,000 times.
 
 When you're done, verify that your p-value is less than 0.05 in approximately 5% (50) of your simulations.
+
+```{r}
+# Create a population with a random mean and SD 
+ normaldistpop <- rnorm(50, mean = 23, sd = 8)
+ ```
+## Choose parameters for this simulation 
+
+```{r}
+# Create groups that each contain half of the population
+group1 <- normaldistpop[1:25]
+group2 <- normaldistpop[26:50]
+
+
+obsdif = mean(group1) - mean(group2)
+
+
+```
+
+``` {r} 
+# Permutation test
+
+# Combine and shuffle the two groups, and then divide them up again
+combine_groups <-c(group1, group2)
+shuffled1 <- combine_groups[1:25]
+shuffled2 <- combine_groups[26:50]
+ 
+ # Shuffle and pull from each group, 
+ # calculcate the mean of each group, 
+ # and find the dif in means - 1e4 times.
+ diffmeans <- replicate( 1e4 ,{
+ shuffled <- sample(combine_groups)
+ samplegroup1 <- shuffled[1:25]
+ samplegroup2 <- shuffled[26:50]
+
+ firstmean <- mean(samplegroup1)
+ secondmean <- mean(samplegroup2)
+
+ sampdiff <- mean(samplegroup1) - mean(samplegroup2)
+ sampdiff
+ }
+ )
+ # Find p value by taking the mean of how often the shuffled means are greater than observed mean
+pval <- mean(diffmeans>obsdif)
+```
+
+```{r} 
+# Create a function out of permutation test so that we can call it 1000 times.
+simulation <- function() {
+normaldistpop <- rnorm(50, mean = 23, sd = 8)
+  group1 <- normaldistpop[1:25]
+group2 <- normaldistpop[26:50]
+
+
+obsdif = mean(group1) - mean(group2)
+
+ combine_groups <-c(group1, group2)
+ 
+ diffmeans <- replicate( 1e4 ,{
+ shuffled <- sample(combine_groups)
+ samplegroup1 <- shuffled[1:25]
+ samplegroup2 <- shuffled[26:50]
+
+ firstmean <- mean(samplegroup1)
+ secondmean <- mean(samplegroup2)
+
+ sampdiff <- mean(samplegroup1) - mean(samplegroup2)
+ sampdiff
+ }
+ )
+pval <- mean(diffmeans>obsdif)
+
+return(pval)
+}
+
+```
+
+```{r}
+# Create the distribution of all 1000 p values
+pval_dist <- replicate(1000, simulation())
+```
+
+```{r}
+# Graph distribution of p-values
+pvals <- tibble(pvaldist = pval_dist) |>
+ggplot(aes(pvaldist)) +
+geom_histogram(binwidth = 0.02) +
+geom_vline(xintercept = 0.05, linewidth = 1)
+
+pvals
+
+
+
+
+```
+
+```{r}
+# Find the proportion of p values that show statistical significance
+mean(pval_dist <= 0.05)
+```
+
+There is no difference in means in this test, since we are pulling randomly from two identical groups. This test shows that the frequency of getting a false positive (incorrectly being able to reject the null that there is no difference) is about 5%. 

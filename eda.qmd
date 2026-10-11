@@ -1,0 +1,142 @@
+```{r}
+birdcount <- read.csv('../data/Shorebird_count_20260929.csv')
+birdbehavior <- read.csv('../data/Shorebird_behavior_20260929.csv')
+birdtransect <- read.csv('../data/Shorebird_transect_environment_20260929.csv')
+```
+
+
+
+1. What environmental question are you curious about? State it in one sentence.
+I am interested in bird population levels over time in Santa Barbara county. 
+
+2. Why does this question matter, and to whom? Who would make a different decision depending on the answer?
+This question matters because declining animal populations are symptoms of broader environmental concerns, and it's important to track the health of species so that measures can be taken to protect them. This should matter to anyone concerned with the health of the environment and therefore themselves. 
+
+3. What do you already know about this topic? Name at least one source (e.g., a paper, report, or news article) that gives context for your question.
+I don't really know much but I do know that many searbird populations are threatened, snowy plovers come to mind especially. 
+https://copr.nrs.ucsb.edu/about/snowy-plover-conservation/
+
+4. What is your **response** variable? What is the main **explanatory** variable you think influences it?
+My response variable would be the number of bird sightings. The explanatory variables might be air temperature or kelp plants. It might be interesting to eventually look at how the combination of temperature and kelp affects bird counts. 
+
+
+1. What dataset(s) will you use to answer your question? Provide the source and a link.
+
+I have 3 datasets from SBC LTER. https://sbclter.msi.ucsb.edu/data/catalog/package/?package=knb-lter-sbc.51 
+
+I am not entirely sure which of the three I should use; I am leaning towards birdbehavior and birdtransect because bird behavior has counts, and bird transect has environmental data. Both of them are observations made during a given survey time along 1 km of the shoreline. For the exploration I did below, I used the transect and behavior DFs. I plan on coming to office hours next week to discuss how exactly I would go about joining these tables, since the data is a bit messy.   
+
+2. Who collected these data, how, and why? How might the way the data were collected affect what you can learn from them?
+Volunteers collected this data, by observing the shoreline during during one sample period. There is likely human error in this data, as samplers are likely to have occasionally missed seeing a bird, or misidentified a bird as another bird. 
+
+3. What does one row in your data represent (e.g., one site, one year, one sample)? How many rows are there?
+A row represents observations made during one sample period.
+
+4. Download the data and read it into R. Include the code for cleaning your data, or joining it if you have multiple sources.
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+# Explore my dataframes.
+nrow(birdtransect)
+nrow(birdbehavior)
+# There are 19,884 rows in bird behavior, but only 1316 in bird transect. 
+sum(birdtransect$YEAR==2008)
+sum(birdbehavior$YEAR==2008)
+
+```
+```{r}
+# Clean my data by removing columns I don't want in my join.
+birdtransect <- birdtransect |>
+  select(-START, -FINISH) 
+
+# Replace -99999 with NAs in both tables.
+birdtransect <- birdtransect|> 
+  mutate(KELP_PLANTS = na_if(KELP_PLANTS, -99999))
+
+birdbehavior <- birdbehavior|> 
+  mutate(COUNT = na_if(COUNT, -99999))
+
+
+```
+
+Join my two dataframes (not confidently)
+```{r}
+joinedbird <- left_join(birdbehavior, birdtransect, by = "YEAR")
+```
+```{r}
+#There is an outlier, find and remove it.
+max(birdtransect$KELP_PLANTS, na.rm=TRUE)
+
+# To do: Remove outlier.
+birdtransect <- birdtransect |> 
+    mutate(KELP_PLANTS = )
+```
+
+## 3. Numerical summaries
+
+1. Summarize your response and explanatory variables numerically (e.g., mean, median, standard deviation, range, counts per category).
+```{r}
+# Explanatory variable summaries
+mean(birdtransect$KELP_PLANTS, na.rm=TRUE)
+median(birdtransect$KELP_PLANTS, na.rm=TRUE)
+sd(birdtransect$KELP_PLANTS, na.rm=TRUE)
+range(birdtransect$KELP_PLANTS, na.rm=TRUE)
+count(birdtransect$KELP_PLANTS)
+
+# Response variable summaries 
+mean(birdbehavior$COUNT, na.rm=TRUE)
+median(birdbehavior$COUNT, na.rm=TRUE)
+sd(birdbehavior$COUNT, na.rm=TRUE)
+range(birdbehavior$COUNT, na.rm=TRUE)
+count(birdbehavior$COUNT, na.rm=TRUE)
+```
+
+
+2. How much data is missing? Is the missingness concentrated in particular places, times, or groups? What might cause it?
+It doesn't look like there's much missing data, but it would make sense if there was. These studies are based on human observations of birds, so there is likely a lot of human error. However, there are a lot of 0's in the data frame, for birds that were not observed during a sampling period. There are also a lot of "unknown"s in the bird status column. 
+
+3. Are there any values that seem implausible or surprising?
+None that I have noticed yet, except one row in the birdtransect DF that has a very large outlier of kelp plants. 
+
+
+Visualize the relationship between your response and explanatory variables. Describe what you see.
+```{r}
+# Very strange graph
+joinedbird |> 
+  filter(COUNT !=0) |> 
+  filter(KELP_PLANTS !=0) |> 
+ggplot(aes(y=COUNT, x=KELP_PLANTS, na.rm=TRUE))+
+    geom_point()
+```
+
+Visualize the distribution of your response variable. Describe its shape (e.g., symmetric, skewed, bounded by zero).
+```{r} 
+
+# Visualize bird sightings over the years
+birdbehavior |> 
+  filter(COUNT !=0) |> 
+ggplot(aes(y=COUNT, x=YEAR, na.rm=TRUE))+
+    geom_point()
+
+# This is a pretty symmetic distribution. There is possibly a slight right skew, but barely. 
+```
+
+Make at least one more figure that shows something about your data you think is important (e.g., variation over space or time, differences between groups, a potential confounding variable).
+# Visualize snowy plover bird sightings over the years
+```{r}
+birdbehavior |> 
+  filter(COUNT !=0) |> 
+  filter(COMMON_NAME == "SNOWY PLOVER") |> 
+ggplot(aes(y=COUNT, x=YEAR, na.rm=TRUE))+
+    geom_point()
+
+# It looks like snowy plover counts have slightly improved over time, which is consistent with the reports about successful conservation efforts. 
+```
+```{r}
+# Visualize amount of kelp over the years
+ggplot(birdtransect, aes(x=YEAR, y=KELP_PLANTS, na.rm=TRUE))+
+    geom_point()
+```
