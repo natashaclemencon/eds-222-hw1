@@ -104,7 +104,9 @@ prepost_null_dist <- replicate(
 # Plot the null distribution.
 tibble(diff_means=prepost_null_dist) |>
   ggplot(aes(prepost_null_dist)) +
-  geom_histogram(binwidth = 5)
+  geom_histogram(binwidth = 5) +
+  geom_vline(xintercept = observeddifmean, color = "blue")
+# To the right of this line indicates how often you would randomly get a difference in means as extreme as the observed. 
 ```
 
 ```{r}
@@ -210,6 +212,11 @@ When you're done, verify that your p-value is less than 0.05 in approximately 5%
  normaldistpop <- rnorm(50, mean = 23, sd = 8)
  ```
 ## Choose parameters for this simulation 
+
+```{r}
+#Visualize random distribution. 
+hist(normaldistpop)
+```
 
 ```{r}
 # Create groups that each contain half of the population
