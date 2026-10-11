@@ -17,8 +17,8 @@ To perform this test, you'll need the `exide-property-covariates.csv` file found
 The question is about _average lead soil concentrations_. You'll need to first get the average lead soil concentration for each property, then join your result to the property covariate data to get the year the house was built.
 
 
-N0 = There is no difference between the average lead soil concentrations in homes built before and after 1970. 
-N1 = There is a difference between the average lead soil concentrations in homes built before and after 1970.
+N0 = Homes built pre-1970 do not have a higher in average lead soil concentration than homes built after 1970. 
+N1 = Homes built pre-1970 have a higher average lead soil concentration than homes built after 1970. 
 
 ```{r}
 library(tidyverse)
@@ -35,7 +35,7 @@ properties <- properties |>
 ```{r}
 # Find the means of the lead concentrations per property
 meanbyprop <- soil |> 
-    summarize(meanpbppm = mean(pb_ppm), na.rm=TRUE, .by=property_id)
+    summarize(meanpbppm = mean(pb_ppm, na.rm=TRUE), .by=property_id)
 ```
 
 ```{r}
@@ -47,11 +47,24 @@ soil_cores <- left_join(properties, meanbyprop, by= join_by(property_id))
 
 
 ```{r}
+# Add a pre1970 column to soil_cores
 soil_cores <- soil_cores |> 
     mutate(pre1970 = year_built < 1970)
 ```
+
 ```{r}
-# Find the mean lead levels in soil before and after 1970. 
+# Visualize the raw data by plotting houses built pre and post 1970, and the mean pb ppm. 
+soil_cores |> 
+  ggplot(aes(x=as.factor(pre1970), y=meanpbppm))+
+  geom_boxplot() +
+  scale_x_discrete(
+    name="",labels = c("FALSE" = "Post 1970", "TRUE" = "Pre 1970")
+
+  )
+
+```
+```{r}
+# Find the mean lead levels in soil before and after 1970 using new pre1970 column. 
 soilmeansprepost <- soil_cores |>
   summarize(meanprepost = mean(meanpbppm), .by = pre1970) |>
   arrange(pre1970)
@@ -70,11 +83,12 @@ observeddifmean <- soilmeansprepost$meanprepost[2]-soilmeansprepost$meanprepost[
 ```
 
 ```{r}
+# Find the difference in means of the shuffled samples. 
 shuffledifmean <- shuffled_year$meanprepost[2] - shuffled_year$meanprepost[1]
 ```
 
 ```{r}
-# Now repeat 10,000 times
+# Now repeat shuffling the samples and finding the difference in means 10,000 times.
 prepost_null_dist <- replicate(
   1e4,
   {
@@ -87,25 +101,27 @@ prepost_null_dist <- replicate(
 ```
 
 ```{r}
-# Plot the null distribution
+# Plot the null distribution.
 tibble(diff_means=prepost_null_dist) |>
   ggplot(aes(prepost_null_dist)) +
   geom_histogram(binwidth = 5)
 ```
 
 ```{r}
-# Create the p value
+# Create the p value.
 pval <- mean(prepost_null_dist>observeddifmean)
 
 ```
 ```{r}
-## The p value of this permutation test was 0, which is below an alpha of 0.05. This means that we have evidence to reject the null hypothesis that there is no difference between soil samples from houses taken before and after 1970. This means that the probaility of observing our sample if the null is true is close to 0. 
+## The p value of this permutation test was 0, which is below an alpha of 0.05. This means that we have evidence to reject the null hypothesis that houses built pre-1970 do not have higher soil lead concentrations than houses built after 1970. This means that the probaility of observing our sample if the null is true is close to 0. 
 
 ```
+
 ## 2. Estimate a confidence interval
 
 Estimate a confidence interval to investigate the following question:
 ```{r}
+# Create a column for distance to freeway in kilometers.
 soil_cores <- soil_cores |> 
   mutate(dist_to_freeway_km=dist_to_freeway_m / 1000) |> 
     mutate(close = dist_to_freeway_km <= 1)
@@ -125,33 +141,21 @@ soil_cores |>
 
 ```
 
-```{r}
-```
-
-```{r}
-# Graph raw data for pre and post 1970 home soil lead contents. 
-soil_cores |>
-  ggplot(aes(x = as.factor(pre1970), y = meanpbppm)) +
-  geom_boxplot() +
-  scale_x_discrete(
-    name="",
-     labels = c("FALSE" = "Post 1970", "TRUE" = "Pre 1970")
-      )
-```
-
 > How much is the difference in average lead soil concentrations between properties within 1km of a freeway and those farther away?
 
 ```{r}
+# Find the mean in pb ppm by if samples were taken closer or further from 1 km from a freeway.
 dist_observed <- soil_cores |>
   summarize(dist_to_freeway_mean_obs = mean(meanpbppm), .by = close) |>
   arrange(close)
 ```
 
 ```{r}
+# Find the difference between samples taken close and far.
 dist_observed_diff = dist_observed$dist_to_freeway_mean_obs[2]-dist_observed$dist_to_freeway_mean_obs[1]
 ```
 ```{r}
-# Now shuffle it and do it again 
+# Now repeat the above process 10,000 times.  
 
 area_samp_dist <- replicate(
   1e4,
@@ -218,7 +222,7 @@ obsdif = mean(group1) - mean(group2)
 
 ```
 
-``` {r} 
+```{r} 
 # Permutation test
 
 # Combine and shuffle the two groups, and then divide them up again
